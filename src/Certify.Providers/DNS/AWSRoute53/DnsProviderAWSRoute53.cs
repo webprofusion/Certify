@@ -89,9 +89,8 @@ namespace Certify.Providers.DNS.AWSRoute53
                 }
                 else
                 {
-                    var zones = await _route53Client.ListHostedZonesAsync();
-                    var zone = zones.HostedZones.Where(z => z.Name.Contains(request.TargetDomainName)).FirstOrDefault();
-                    return zone;
+                    // invalid or empty zone id, don't attempt to fuzzy match
+                    return null;
                 }
             }
             catch (Exception)
@@ -253,17 +252,31 @@ namespace Certify.Providers.DNS.AWSRoute53
 
         public async Task<List<DnsZone>> GetZones()
         {
-            var zones = await _route53Client.ListHostedZonesAsync();
 
             var results = new List<DnsZone>();
-            foreach (var z in zones.HostedZones)
+            string pageMarker = null;
+            var hasMorePages = true;
+            try
             {
-                results.Add(new DnsZone
+
+                while (hasMorePages)
                 {
-                    ZoneId = z.Id,
-                    Name = z.Name
-                });
+                    var zones = await _route53Client.ListHostedZonesAsync(new ListHostedZonesRequest { Marker = pageMarker });
+
+                    hasMorePages = zones.IsTruncated;
+                    pageMarker = zones.NextMarker;
+
+                    foreach (var z in zones.HostedZones)
+                    {
+                        results.Add(new DnsZone
+                        {
+                            ZoneId = z.Id,
+                            Name = z.Name
+                        });
+                    }
+                }
             }
+            catch (Exception) { }
 
             return results;
         }
